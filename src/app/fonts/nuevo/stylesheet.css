@@ -1,0 +1,13 @@
+@font-face {
+  font-family: "Neue Haas Grotesk Display Pro";
+  src: url("NeueHaasDisplay-BlackItalic.woff2") format("woff2");
+  font-weight: 900;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "Neue Haas Grotesk Display Pro";
+  src: url("NeueHaasDisplay-Roman.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+}

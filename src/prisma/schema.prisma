@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  admin             Admin   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  admin        Admin    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+
+model User {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  email     String    @unique
+  name      String?
+  password  String?
+  image     String?
+  emailVerified DateTime?
+  firstName String?
+  lastName  String?
+  // Removed accounts relation if not needed
+  // accounts  Account[] @relation("UserAccount")
+  // sessions  Session[] @relation("UserSession")  
+}
+model ContactQuery {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String    
+  reason    String
+  query     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reason_for_cancel String?  // Add this line
+  subscriptionStatus String?
+
+  @@index([email])
+  @@index([createdAt])
+}
+model Inquiry {
+  id                String       @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  email             String
+  message           String
+  createdAt         DateTime @default(now())
+}
+model VerificationToken {
+    id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Admin {
+  id                 String             @id @default(auto()) @map("_id") @db.ObjectId
+  name               String?
+  email              String             @unique
+  phone              String?
+  emailVerified      DateTime?          
+  subscriptionStatus SubscriptionStatus @default(INCOMPLETE)
+  subscriptionExpiry DateTime
+  cancellationReason String?
+  cancellationRequestDate DateTime?
+  cancellationApprovalDate DateTime?
+  autoRenew          Boolean            @default(false)
+  depositPercentage  Float              @default(15.0)
+  artists            Artist[]           @relation("AdminToArtists")
+  leads              Lead[]             @relation("AdminToLeads")
+  bookings           Booking[]          @relation("AdminToBookings")
+  image              String?
+  hashedPassword     String?            @default("")
+  stripeCustomerId   String?
+  trial              Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  userType           UserType          
+  artistsNum         Int                @default(0)
+  providerAccountId  String?
+  provider           String?
+  verificationToken      String?            
+  verificationTokenExpiry DateTime?
+  accounts           Account[]          // Added this relation
+  sessions           Session[]          // Added this relation
+
+  //@@unique([provider, providerAccountId])
+}
+
+
+enum UserType {
+  ADMIN
+  ARTIST
+  STUDIO
+  UNSELECTED
+}
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  PENDING
+  CANCELATIONINPROGRESS
+  INCOMPLETE
+}
+
+model Artist {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  adminId        String       @db.ObjectId
+  name           String
+  email          String       @unique
+  phone          String
+  specialization String
+  hourlyRate     Float
+  rates          TattooRates? @relation("ArtistToTattooRates")
+  admin          Admin        @relation("AdminToArtists", fields: [adminId], references: [id])
+  createdAt      DateTime     @default(now())
+  Lead           Lead[]
+}
+
+model TattooRates {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  artistId String @unique @db.ObjectId
+  tiny     Float // Price for 1-2 hours, 1-5cm
+  small    Float // Price for 1-3 hours, 5-10cm
+  medium   Float // Price for 2-4 hours, 10-15cm
+  large    Float // Price for 3-5 hours, 15-20cm
+  xl       Float // Price for 4-6 hours, 20-25cm
+  xxl      Float // Price for 5-8 hours
+  artist   Artist @relation("ArtistToTattooRates", fields: [artistId], references: [id])
+}
+
+model Lead {
+  id               String          @id @default(auto()) @map("_id") @db.ObjectId
+  adminId          String          @db.ObjectId
+  clientName       String
+  artistName       String
+  email            String
+  phone            String
+  gender           Gender
+  skinTone         String
+  tattooRequests   TattooRequest[] @relation("LeadToTattooRequests")
+  selectedArtistId String?         @db.ObjectId
+  selectedArtist   Artist?         @relation(fields: [selectedArtistId], references: [id])
+  priceEstimate    Float
+  depositPaid      Float
+  Designs String[] // array of design URLs
+  status           LeadStatus      @default(PENDING)
+  confirmed3DModel String? // URL for confirmed 3D model
+  tattooCloseups String[] // Array of strings instead of single nullable string
+  admin            Admin           @relation("AdminToLeads", fields: [adminId], references: [id])
+  createdAt        DateTime        @default(now())
+  Booking          Booking[]
+        
+
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum LeadStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model TattooRequest {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId      String   @db.ObjectId
+  description String? // Optional description
+  imageUrls   String[] // Uploaded tattoo design URLs
+  lead        Lead     @relation("LeadToTattooRequests", fields: [leadId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model Booking {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  adminId          String        @db.ObjectId
+  leadId           String        @db.ObjectId
+  date             DateTime
+  status           BookingStatus @default(CONFIRMED)
+  confirmed3DModel String? // URL to the confirmed 3D model
+  lead             Lead          @relation(fields: [leadId], references: [id])
+  admin            Admin         @relation("AdminToBookings", fields: [adminId], references: [id])
+  createdAt        DateTime      @default(now())
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+
+model OTPVerification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  otp       String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  @@index([email])
+  @@index([expiresAt])
+}
