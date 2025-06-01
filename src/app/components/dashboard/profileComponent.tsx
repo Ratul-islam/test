@@ -31,12 +31,9 @@ const ProfileComponent = (props: any) => {
     const file = acceptedFiles[0]; // Get the first file
     setImage(file);
 
-    // Generate preview
-    const fileReader = new FileReader();
-    fileReader.onload = () => {
-      setPreview(fileReader.result as string);
-    };
-    fileReader.readAsDataURL(file);
+    // Generate preview using URL.createObjectURL instead of FileReader
+    // This avoids creating base64 data URLs
+    setPreview(URL.createObjectURL(file));
   }, []);
 
   const { getRootProps, getInputProps } = useDropzone({
@@ -46,25 +43,11 @@ const ProfileComponent = (props: any) => {
   });
 
   const handleUpload = async () => {
-    if (image) {
-      const formData = new FormData();
-      formData.append("profilePhoto", image);
-      onChangeProfilePhoto(preview);
-      try {
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (response.ok) {
-          alert('Upload successful!');
-        } else {
-          alert('Upload failed.');
-        }
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        alert('Upload failed.');
-      }
+    if (image && preview) {
+      // Pass both the actual File object and preview URL
+      // This ensures the File object is sent as binary data
+      onChangeProfilePhoto(image, preview);
+      
       setIsModalOpen(false);
       setPreview(null);
       setImage(null);
@@ -75,7 +58,8 @@ const ProfileComponent = (props: any) => {
   const handleRemove = () => {
     setImage(null);
     setPreview(null);
-    onChangeProfilePhoto("");
+    // Pass null for both File and preview URL
+    onChangeProfilePhoto(null, null);
   };
 
   return (

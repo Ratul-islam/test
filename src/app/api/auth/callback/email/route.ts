@@ -1,91 +1,81 @@
-// src/app/api/auth/callback/email/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/app/utils/prismadb";
+// import { setCookie } from "cookies-next";
+// import { getToken } from "next-auth/jwt";
+import { encode } from "next-auth/jwt";
+
+const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET!;
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const token = searchParams.get('token');
-    const email = searchParams.get('email');
+    const token = searchParams.get("token");
+    const email = searchParams.get("email");
 
     if (!token || !email) {
-      return NextResponse.redirect(new URL('/sign-in?error=Invalid+magic+link', request.url));
+      return NextResponse.redirect(new URL("/sign-in?error=Invalid+magic+link", request.url));
     }
 
-    
+
     const verificationToken = await prisma.verificationToken.findUnique({
-      where: { token }
+      where: { token: token },
     });
 
     if (!verificationToken || verificationToken.identifier !== email) {
-      return NextResponse.redirect(new URL('/sign-in?error=Invalid+or+expired+magic+link', request.url));
+      return NextResponse.redirect(new URL("/sign-in?error=Invalid+or+expired+magic+link", request.url));
     }
 
-    // Check if token has expired
     if (new Date() > verificationToken.expires) {
-      // Delete the expired token
-      await prisma.verificationToken.delete({
-        where: { token }
-      });
-      return NextResponse.redirect(new URL('/sign-in?error=Magic+link+expired', request.url));
+      await prisma.verificationToken.delete({ where: { token: token } });
+      return NextResponse.redirect(new URL("/sign-in?error=Magic+link+expired", request.url));
     }
 
-    // Check if the user exists
-    const user = await prisma.admin.findUnique({
-        where: { email }
-      });
-    
+    let user = await prisma.user.findUnique({
+      where: { email },
+    });
+
     if (!user) {
-      // For new users, redirect to complete signup
-      return NextResponse.redirect(
-        new URL(`/sign-up?email=${encodeURIComponent(email)}&verified=true`, request.url)
-      );
-    }
-
-    // If user exists but email not verified, verify it now
-    if (!user.emailVerified) {
-      await prisma.admin.update({
+      user = await prisma.user.create({
+        data: {
+          email,
+          emailVerified: new Date(),
+        },
+      });
+    } else if (!user.emailVerified) {
+      await prisma.user.update({
         where: { id: user.id },
-        data: { emailVerified: new Date() }
+        data: { emailVerified: new Date() },
       });
     }
 
-    // Delete the token as it's been used
-    await prisma.verificationToken.delete({
-      where: { token }
+    await prisma.verificationToken.delete({ where: { token: token } });
+
+    // Manually create a JWT token
+    const jwtToken = await encode({
+      token: {
+        name: user.name,
+        email: user.email,
+        picture: user.image,
+        sub: user.id,
+      },
+      secret: NEXTAUTH_SECRET,
+      maxAge: 30 * 24 * 60 * 60, // 30 days
     });
 
-    
-    const response = NextResponse.redirect(new URL('/sign-in', request.url));
-    
-    
-    response.cookies.set({
-      name: 'magic_link_auth',
-      value: 'true',
+    const response = NextResponse.redirect(new URL("/dashboard", request.url)); // Redirect to dashboard or homepage
+
+    // Set session cookie
+    response.cookies.set("next-auth.session-token", jwtToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 10 // 10 minutes
-    });
-    
-    response.cookies.set({
-      name: 'magic_link_email',
-      value: email,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 10 // 10 minutes
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60, // 30 days
     });
 
     return response;
-
   } catch (error) {
-    console.error('Magic link callback error:', error);
-    return NextResponse.redirect(
-      new URL('/sign-in?error=Authentication+failed', request.url)
-    );
+    console.error("Magic link callback error:", error);
+    return NextResponse.redirect(new URL("/sign-in?error=Authentication+failed", request.url));
   }
 }

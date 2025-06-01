@@ -13,7 +13,7 @@ import { enableScroll } from "@/app/utils/scrollbar";
 import {fetchArtists} from "@/app/services/artistService";
 import { format } from 'date-fns';
 import {fetchLeads} from "@/app/services/leadService";
-import {fetchUserSession} from "@/app/services/userService";
+import {fetchUserSession, updateAdminProfile} from "@/app/services/userService";
 import ProfileComponent from "@/app/components/dashboard/profileComponent";
 import { toast } from 'react-toastify';
 import { fetchRevenueData } from "@/app/services/revenueService";
@@ -176,11 +176,57 @@ const Dashboard = () => {
       });
   };
 
-  const onChangeProfilePhoto = (image: File | string) => {
-    const tempUser = {...user, image: typeof image === 'string' ? image : URL.createObjectURL(image)};
-    setUser(tempUser);
-  };
+ const onChangeProfilePhoto = async (file: File | null, previewUrl: string | null) => {
+  if (!session || !session.user) {
+    toast.error("Session not available");
+    return;
+  }
 
+  try {
+    // Update UI immediately for better UX
+    setUser(prevUser => ({
+      ...prevUser,
+      image: previewUrl || "/dashboard/default.png"
+    }));
+
+    // If there's a file, upload it
+    if (file) {
+      const formData = new FormData();
+      formData.append("adminId", session.user.id);
+      formData.append("name", user.name);
+      formData.append("phone", user.phone);
+      formData.append("depositPercentage", user.depositPercentage.toString());
+      
+      // Make sure we're appending the actual File object, not a data URL
+      formData.append("image", file);  // This should be the File object
+
+      const [suc, err] = await updateAdminProfile({ body: formData });
+      
+      if (err) {
+        // Revert UI change if upload failed
+        setUser(prevUser => ({
+          ...prevUser,
+          image: user.image // revert to original image
+        }));
+        toast.error("Failed to update profile photo");
+        console.error("Upload error:", err);
+      } else {
+        // Refresh user data to get the updated image URL from server
+        console.log(suc)
+        await getAdmins();
+        toast.success("Profile photo updated successfully!");
+      }
+    }
+  } catch (error) {
+    // Revert UI change if upload failed
+    setUser(prevUser => ({
+      ...prevUser,
+      image: user.image // revert to original image
+    }));
+    toast.error("Failed to update profile photo");
+    console.error("Error updating profile photo:", error);
+  }
+};
   useEffect(() => {
     allArtists();
     getAdmins();
@@ -196,7 +242,6 @@ const Dashboard = () => {
   
   return (
     <div className='flex flex-col gap-y-4 p-4 tablet:p-2 tablet:gap-y-2 mobile:p-1 mobile:pb-20'>
-
 
       {/* Profile and Subscription Row */}
       <div className='flex gap-x-4 xl:flex-col items-center xl:items-start xl:gap-y-4 tablet:gap-y-2 w-full'>
@@ -275,6 +320,7 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Rest of the component remains the same... */}
       {/* Leads Stats Row */}
       <div className='flex gap-4 xl:flex-col xl:items-start tablet:gap-2'>
         <div className='flex items-center w-full max-w-[781px] gap-x-4 tablet:gap-2 xl:max-w-full mobile:flex-col'>
@@ -559,34 +605,6 @@ const Dashboard = () => {
               }}
             />
           </div>
-{/* 
-          <div className='p-6 w-[384px] min-h-[144px] rounded-[12px] mx-auto shadow-md flex flex-col justify-between mobile:p-2 mobile:min-h-[100px] mobile:w-full'>
-            <span className='text-[20px] mobile:text-[16px] tracking-[-0.02em] font-semibold font-second mb-4'>
-              Booked Lead
-            </span>
-            {selectedMeetingsData.length !== 0 && selectedMeetingsData.map((data, index) => (
-              <div key={`${index} ${data.date}`} className='flex items-center gap-x-3 my-2'>
-                <Image
-                  src={data.image}
-                  height={40}
-                  width={40}
-                  alt='avatar'
-                />
-                <span className='text-[20px] mobile:text-[16px] font-inter font-bold'>
-                  {data.name}
-                </span>
-                <span className='flex ml-auto gap-x-2'>
-                  <Image
-                    src='/dashboard/time-blue.svg'
-                    alt='time'
-                    height={16}
-                    width={16}
-                  />
-                  {data.date}
-                </span>
-              </div>
-            ))}
-          </div> */}
 
           <div className='p-6 mobile:p-2 rounded-[12px] h-[380px] shadow-md'>
             <Calendar
